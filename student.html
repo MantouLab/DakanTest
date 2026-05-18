@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>學生資料輸入</title>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #74ebd5, #9face6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .card {
+      background: white;
+      padding: 40px;
+      border-radius: 24px;
+      width: 90%;
+      max-width: 420px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #333;
+    }
+    
+    label {
+      font-size: 18px;
+      display: block;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      color: #444;
+    }
+
+    select,
+    input {
+      width: 100%;
+      padding: 16px;
+      border-radius: 14px;
+      border: 1px solid #ccc;
+      font-size: 20px;
+      box-sizing: border-box;
+    }
+
+    button {
+      width: 100%;
+      padding: 18px;
+      margin-top: 30px;
+      border: none;
+      border-radius: 16px;
+      background: #4f46e5;
+      color: white;
+      font-size: 22px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #4338ca;
+    }
+
+    .success {
+      text-align: center;
+      margin-top: 20px;
+      color: green;
+      font-size: 18px;
+    }
+
+    .parent {
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>📱 投資分配比例</h1>
+
+  <label>選擇組別</label>
+  <select disabled id="group" onchange="listenGroupStatus()">
+    <option value="1">第1組</option>
+    <option value="2">第2組</option>
+    <option value="3">第3組</option>
+    <option value="4">第4組</option>
+    <option value="5">第5組</option>
+  </select>
+
+  <label>本金: 1,000,000</label>
+  <label class="nowrap">
+  目前總資產: <span id="moneyValue">1,000,000</span>
+  </label>
+  <label>股票(±20%)</label>
+  <input type="number" id="valueA" placeholder="請輸入金額" />
+
+  <label>基金(±10%)</label>
+  <input type="number" id="valueB" placeholder="請輸入金額" />
+
+  <label>定存(+3%)</label>
+  <input type="number" id="valueC" placeholder="請輸入金額" />
+
+  <button id="submitBtn" onclick="submitData()">送出資料</button>
+
+  <div class="success" id="success"></div>
+</div>
+
+<script>
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyCe-jBtC9oKmkV3yAqVc8s7BnbbUtUQcJI",
+    authDomain: "dakan-test.firebaseapp.com",
+    databaseURL: "https://dakan-test-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "dakan-test",
+    storageBucket: "dakan-test.firebasestorage.app",
+    messagingSenderId: "22981315033",
+    appId: "1:22981315033:web:751f22af1f1f7eecf5f1c8"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+
+  const db = firebase.database();
+
+  const params =
+    new URLSearchParams(window.location.search);
+  
+  const defaultGroup =
+    params.get("group");
+  
+  if (defaultGroup) {  
+    document.getElementById("group").value = defaultGroup;
+  }
+  let currentListener = null;
+  listenGroupStatus();
+  loadCurrentYValues();
+  
+  const group = document.getElementById("group").value;
+
+  db.ref(`control/${group}`).on("value", snapshot => {
+    const canSubmit = snapshot.val();
+  
+    const btn = document.getElementById("submitBtn");
+  
+    if (canSubmit === false) {
+      btn.disabled = true;
+      btn.style.background = "#9ca3af";
+      btn.innerText = "等待老師開放";
+    } else {
+      btn.disabled = false;
+      btn.style.background = "#4f46e5";
+      btn.innerText = "送出資料";
+    }
+  });
+  
+  db.ref("scores").on("child_changed", snapshot => {
+      const data = snapshot.val();
+      const group = document.getElementById("group").value;
+      if (data.group != group) return;
+    
+      document.getElementById("moneyValue").textContent = data.yValues[4].toLocaleString();
+  });
+
+  function loadCurrentYValues() {
+
+    const group =
+      document.getElementById("group").value;
+  
+    db.ref("scores").orderByChild("group").equalTo(group).once("value", snapshot => {
+  
+      let latestData = null;
+      let maxSubmit = -1;
+    
+      snapshot.forEach(child => {
+    
+        const data = child.val();
+    
+        if (
+          data.submitCount > maxSubmit &&
+          data.yValues
+        ) {
+    
+          maxSubmit = data.submitCount;
+          latestData = data;
+        }
+    
+      });
+    
+      if (!latestData) return;
+  
+      document.getElementById("moneyValue").textContent = latestData.yValues[4].toLocaleString();
+    });
+  }
+  
+  function listenGroupStatus() {
+  
+    const group =
+      document.getElementById("group").value;
+  
+    const btn =
+      document.getElementById("submitBtn");
+  
+    // 移除舊監聽
+    if (currentListener) {
+      currentListener.off();
+    }
+  
+    currentListener =
+      db.ref(`control/${group}`);
+  
+    currentListener.on("value", snapshot => {
+  
+      const canSubmit = snapshot.val();
+  
+      if (canSubmit === false) {
+  
+        btn.disabled = true;
+        btn.style.background = "#9ca3af";
+        btn.innerText = "等待老師開放";
+  
+      } else {
+  
+        btn.disabled = false;
+        btn.style.background = "#4f46e5";
+        btn.innerText = "送出資料";
+  
+      }
+  
+    });
+  
+  }
+  
+  function submitData() {
+    const group = document.getElementById("group").value;
+
+    const valueA = document.getElementById("valueA").value;
+    const valueB = document.getElementById("valueB").value;
+    const valueC = document.getElementById("valueC").value;
+
+    if (valueA == "" || valueB == "" || valueC == "") {
+      alert("請輸入分配金額");
+      return;
+    }
+
+    let total= 1000000;
+    let latestSubmitCount = -1;
+
+    db.ref("scores").orderByChild("group").equalTo(group).once("value", snapshot => {
+      snapshot.forEach(child => {
+        const data = child.val();
+      
+        if (
+          data.submitCount > latestSubmitCount &&
+          data.yValues
+        ) {
+          latestSubmitCount = data.submitCount;
+      
+          total = data.yValues[4];
+        }
+      });
+    });
+      
+    if (Number(valueA)+Number(valueB)+Number(valueC) > total) {
+      alert("本金超過囉~有借錢嗎?");
+      return;
+    }
+
+    db.ref("scores").orderByChild("group").equalTo(group).once("value", snapshot => {
+      let submitCount = 0;
+
+      snapshot.forEach(child => {
+        submitCount++;
+      });
+
+      if (submitCount >= 4) {
+        alert("這組已達到最多 4 次送出！");
+        return;
+      }
+      
+      db.ref("scores").push({
+        group: group,
+        valueA: Number(valueA),
+        valueB: Number(valueB),
+        valueC: Number(valueC),
+        submitCount:submitCount+1,
+        time: new Date().toLocaleTimeString()
+      });
+  
+      document.getElementById("success").innerText = "✅ 已送出";
+      db.ref(`control/${group}`).set(false);
+      document.getElementById("valueA").value = "";
+      document.getElementById("valueB").value = "";
+      document.getElementById("valueC").value = "";
+  
+      setTimeout(() => {
+        document.getElementById("success").innerText = "";
+      }, 1500);
+
+    });
+  }
+</script>
+
+</body>
+</html>
