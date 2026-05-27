@@ -323,9 +323,11 @@
   }
 
   function getRandom( min, max ) {
-      var random = Math.floor( Math.random() * (max + 1 - min) ) + min;
+      let r = Math.pow(Math.random(), 0.6);
+      return min + (max-min) * r;
+      //var random = Math.floor( Math.random() * (max + 1 - min) ) + min;
     
-      return random;
+      //return random;
   }  
 </script>
 
